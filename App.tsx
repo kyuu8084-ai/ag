@@ -8,17 +8,18 @@ import { LoginModal } from './components/LoginModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { Post, Attachment, Comment, SubjectId, SUBJECTS, User, Notification, FRAMES } from './types';
 import { generateAiReply } from './services/geminiService';
+import { db, collection, addDoc, updateDoc, doc, onSnapshot, arrayUnion, increment, query, orderBy, isConfigured as isFirebaseReady } from './services/firebase';
 import { 
   BookOpen, LogIn, ChevronLeft, ChevronRight, Trophy, Sparkles, 
-  Search, Bell, Filter, Flame, Clock, Cloud
+  Search, Bell, Filter, Flame, Clock, Cloud, Wifi, WifiOff
 } from 'lucide-react';
 
 const POSTS_PER_PAGE = 10;
 const LEVEL_THRESHOLDS = [0, 300, 500, 1000, 2000, 4000, 7000, 10000];
-const STORAGE_KEY_USER = 'swm_user_data';
-const STORAGE_KEY_POSTS = 'swm_posts_data';
+const STORAGE_KEY_USER = 'swm_user_data_v2';
+const STORAGE_KEY_POSTS = 'swm_posts_data_v2';
 
-// Background Types (Removed SNOW)
+// Background Types
 type BackgroundType = 'CLOUD' | 'OCEAN' | 'CITY';
 
 // Sample initial data distributed across subjects
@@ -64,15 +65,8 @@ const INITIAL_POSTS: Post[] = [
 const App: React.FC = () => {
   const [activeSubject, setActiveSubject] = useState<SubjectId>('KHAC');
   
-  // Load posts from localStorage or use initial
-  const [posts, setPosts] = useState<Post[]>(() => {
-    try {
-      const savedPosts = localStorage.getItem(STORAGE_KEY_POSTS);
-      return savedPosts ? JSON.parse(savedPosts) : INITIAL_POSTS;
-    } catch (e) {
-      return INITIAL_POSTS;
-    }
-  });
+  // State for posts
+  const [posts, setPosts] = useState<Post[]>([]);
 
   // Load user from localStorage
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -80,6 +74,7 @@ const App: React.FC = () => {
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
       return savedUser ? JSON.parse(savedUser) : null;
     } catch (e) {
+      console.error("Error loading user from storage", e);
       return null;
     }
   });
@@ -104,11 +99,44 @@ const App: React.FC = () => {
   const menuScrollRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Persistence Effects
+  // --- DATA SYNCING LOGIC ---
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
+    if (isFirebaseReady && db) {
+      // ONLINE MODE: Subscribe to Firestore
+      const q = query(collection(db, "posts"), orderBy("timestamp", "desc"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const cloudPosts = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Post[];
+        setPosts(cloudPosts);
+      }, (error) => {
+        console.error("Error reading from Firebase:", error);
+      });
+      return () => unsubscribe();
+    } else {
+      // OFFLINE MODE: Load from localStorage
+      try {
+        const savedPosts = localStorage.getItem(STORAGE_KEY_POSTS);
+        if (savedPosts) {
+          setPosts(JSON.parse(savedPosts));
+        } else {
+          setPosts(INITIAL_POSTS);
+        }
+      } catch (e) {
+        setPosts(INITIAL_POSTS);
+      }
+    }
+  }, []);
+
+  // Save to localStorage only in Offline Mode
+  useEffect(() => {
+    if (!isFirebaseReady) {
+      localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
+    }
   }, [posts]);
 
+  // Persistence Effects - Save whenever user changes (User data always local for now)
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
@@ -205,7 +233,7 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (name: string, avatar: string) => {
-    setCurrentUser({
+    const newUser: User = {
       id: Math.random().toString(36).substr(2, 9),
       name,
       avatar,
@@ -213,23 +241,28 @@ const App: React.FC = () => {
       xp: 0,
       bio: 'Tân thủ StudyWithMe',
       showcase: []
-    });
+    };
+    setCurrentUser(newUser);
+    // Explicitly save immediately
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(newUser));
     setShowLogin(false);
   };
 
   const handleUpdateUser = (updates: Partial<User>) => {
     if (currentUser) {
-      setCurrentUser({ ...currentUser, ...updates });
+      const updatedUser = { ...currentUser, ...updates };
+      setCurrentUser(updatedUser);
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
     }
   };
 
-  const handleNewPost = (content: string, attachments: Attachment[]) => {
+  const handleNewPost = async (content: string, attachments: Attachment[]) => {
     if (!currentUser) {
       setShowLogin(true);
       return;
     }
-    const newPost: Post = {
-      id: Date.now().toString(),
+    
+    const newPostData = {
       subject: activeSubject,
       author: currentUser.name,
       avatar: currentUser.avatar,
@@ -240,21 +273,46 @@ const App: React.FC = () => {
       comments: [],
       frameId: currentUser.frameId
     };
-    setPosts([newPost, ...posts]);
+
+    if (isFirebaseReady && db) {
+      // Save to Firebase
+      try {
+        await addDoc(collection(db, "posts"), newPostData);
+      } catch (e) {
+        console.error("Error adding doc: ", e);
+      }
+    } else {
+      // Save to LocalStorage
+      const newPost: Post = { ...newPostData, id: Date.now().toString() };
+      setPosts([newPost, ...posts]);
+    }
+
     setCurrentPage(1);
     handleGainXP(50); // +50XP for posting
   };
 
-  const handleLike = (postId: string) => {
+  const handleLike = async (postId: string) => {
     if (!currentUser) {
       setShowLogin(true);
       return;
     }
-    setPosts(posts.map(post => 
-      post.id === postId 
-        ? { ...post, likes: post.likes + 1 } 
-        : post
-    ));
+
+    if (isFirebaseReady && db) {
+      try {
+        const postRef = doc(db, "posts", postId);
+        await updateDoc(postRef, {
+          likes: increment(1)
+        });
+      } catch (e) {
+        console.error("Error updating likes: ", e);
+      }
+    } else {
+      setPosts(posts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: post.likes + 1 } 
+          : post
+      ));
+    }
   };
 
   const handleReply = async (postId: string, content: string, attachments: Attachment[]) => {
@@ -272,18 +330,29 @@ const App: React.FC = () => {
       frameId: currentUser.frameId
     };
 
-    setPosts(prevPosts => prevPosts.map(post => {
-      if (post.id === postId) {
-        return { ...post, comments: [...post.comments, newComment] };
-      }
-      return post;
-    }));
+    if (isFirebaseReady && db) {
+       try {
+         const postRef = doc(db, "posts", postId);
+         await updateDoc(postRef, {
+           comments: arrayUnion(newComment)
+         });
+       } catch (e) {
+         console.error("Error adding reply: ", e);
+       }
+    } else {
+      setPosts(prevPosts => prevPosts.map(post => {
+        if (post.id === postId) {
+          return { ...post, comments: [...post.comments, newComment] };
+        }
+        return post;
+      }));
+    }
 
     handleGainXP(50); // +50XP for replying
 
     const targetPost = posts.find(p => p.id === postId);
     if (targetPost) {
-       // Mock notification for user receiving a reply
+       // Mock notification & AI Reply
        setTimeout(async () => {
          const aiText = await generateAiReply(content, attachments, targetPost.subject);
          const aiComment: Comment = {
@@ -296,12 +365,21 @@ const App: React.FC = () => {
            isAi: true
          };
          
-         setPosts(currentPosts => currentPosts.map(p => {
-           if (p.id === postId) {
-             return { ...p, comments: [...p.comments, aiComment] };
-           }
-           return p;
-         }));
+         if (isFirebaseReady && db) {
+           try {
+             const postRef = doc(db, "posts", postId);
+             await updateDoc(postRef, {
+               comments: arrayUnion(aiComment)
+             });
+           } catch(e) {}
+         } else {
+           setPosts(currentPosts => currentPosts.map(p => {
+             if (p.id === postId) {
+               return { ...p, comments: [...p.comments, aiComment] };
+             }
+             return p;
+           }));
+         }
 
          setNotifications(prev => [{
            id: 'notif-' + Date.now(),
@@ -352,7 +430,20 @@ const App: React.FC = () => {
                 <h1 className="text-xl md:text-2xl font-bungee tracking-wide leading-none bg-clip-text text-transparent bg-gradient-to-r from-sky-600 to-indigo-600 drop-shadow-sm">
                   StudyWithMe
                 </h1>
-                <span className="text-[10px] text-sky-800/60 font-medium uppercase tracking-widest hidden sm:block">Diễn đàn học tập</span>
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-sky-800/60 font-medium uppercase tracking-widest hidden sm:block">Diễn đàn học tập</span>
+                   {isFirebaseReady ? (
+                     <div className="flex items-center gap-1 bg-green-100 px-1.5 py-0.5 rounded text-[8px] font-bold text-green-700 border border-green-200" title="Đã kết nối dữ liệu Online">
+                       <Wifi size={10} />
+                       ONLINE
+                     </div>
+                   ) : (
+                     <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded text-[8px] font-bold text-gray-500 border border-gray-200" title="Chế độ Offline (Chỉ lưu trên máy này)">
+                       <WifiOff size={10} />
+                       OFFLINE
+                     </div>
+                   )}
+                </div>
               </div>
             </div>
 
