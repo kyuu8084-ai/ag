@@ -73,10 +73,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
   const currentFrame = FRAMES.find(f => f.id === user.frameId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="relative w-full max-w-4xl bg-[#F4F1E8] rounded-xl shadow-2xl overflow-hidden flex flex-col md:flex-row border-4 border-[#DCD6C7]" style={{ minHeight: '550px' }}>
+    // Outer overlay is now scrollable for mobile (overflow-y-auto) and items-start to prevent cutting off top on simple overflow
+    <div className="fixed inset-0 z-50 flex md:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto items-start">
+      {/* Container: Removed fixed minHeight, added my-8 for scroll margin, flex-col on mobile */}
+      <div className="relative w-full max-w-4xl bg-[#F4F1E8] rounded-xl shadow-2xl flex flex-col md:flex-row border-4 border-[#DCD6C7] my-8 md:my-0">
         
-        {/* Close Button */}
+        {/* Close Button - Fixed position relative to container is tricky on scroll, making it absolute top right */}
         <button 
           onClick={onClose}
           className="absolute top-2 right-2 z-50 text-gray-500 hover:text-red-500 bg-white/80 p-2 rounded-full shadow-md transition-all hover:scale-110"
@@ -85,12 +87,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
         </button>
 
         {/* Left Page (Main Info) */}
-        <div className="w-full md:w-1/2 p-8 border-r-2 border-[#DCD6C7] flex flex-col items-center relative">
+        <div className="w-full md:w-1/2 p-6 md:p-8 border-b-2 md:border-b-0 md:border-r-2 border-[#DCD6C7] flex flex-col items-center relative">
             <div className="absolute top-4 left-6 text-gray-400 font-pixel text-xs">ID: {user.id.slice(0, 8)}</div>
             
             {/* Avatar Section */}
             <div className="mt-8 mb-4 relative group">
-              <div className="relative w-32 h-32 rounded-full bg-white p-1 shadow-inner cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+              <div className="relative w-28 h-28 md:w-32 md:h-32 rounded-full bg-white p-1 shadow-inner cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
                  <img src={user.avatar} alt="Avatar" className="frame-content rounded-full transition-transform group-hover:scale-95" />
                  
                  {/* Avatar Change Overlay */}
@@ -147,13 +149,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
             )}
 
             {/* Name */}
-            <h2 className="text-2xl font-bold text-[#495366] font-bungee mb-6 mt-4">{user.name}</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-[#495366] font-bungee mb-6 mt-4 break-words text-center">{user.name}</h2>
 
             {/* Stats Bars */}
-            <div className="w-full space-y-3 px-4">
+            <div className="w-full space-y-3 px-2 md:px-4">
                <div className="flex items-center bg-[#EBE5D5] rounded-lg p-2 relative overflow-hidden">
-                  <div className="w-24 font-bold text-[#7E8592] text-sm z-10">Kinh nghiệm</div>
-                  <div className="flex-1 text-right font-bold text-[#495366] pr-2 z-10 text-xs">
+                  <div className="w-20 md:w-24 font-bold text-[#7E8592] text-xs md:text-sm z-10 shrink-0">Kinh nghiệm</div>
+                  <div className="flex-1 text-right font-bold text-[#495366] pr-2 z-10 text-[10px] md:text-xs truncate">
                     {currentXP} / {nextLevelXP} XP
                   </div>
                   <div 
@@ -162,8 +164,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                   ></div>
                </div>
                <div className="flex items-center bg-[#EBE5D5] rounded-lg p-2 relative overflow-hidden">
-                  <div className="w-24 font-bold text-[#7E8592] text-sm z-10">Danh Hiệu</div>
-                  <div className={`flex-1 text-right font-bold pr-2 z-10 text-xs ${lvlInfo.color}`}>
+                  <div className="w-20 md:w-24 font-bold text-[#7E8592] text-xs md:text-sm z-10 shrink-0">Danh Hiệu</div>
+                  <div className={`flex-1 text-right font-bold pr-2 z-10 text-[10px] md:text-xs truncate ${lvlInfo.color}`}>
                      {lvlInfo.name}
                   </div>
                </div>
@@ -202,22 +204,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
         </div>
 
         {/* Right Page (Achievements/Cards) */}
-        <div className="w-full md:w-1/2 p-8 bg-[#F4F1E8] flex flex-col">
+        <div className="w-full md:w-1/2 p-6 md:p-8 bg-[#F4F1E8] flex flex-col">
            <div className="flex items-center gap-2 mb-6 border-b-2 border-[#EBE5D5] pb-2">
               <Award className="text-[#D3BC8E]" size={24} />
               <h3 className="text-lg font-bold text-[#495366]">Huy Chương Học Tập</h3>
               <span className="ml-auto text-xl font-bold text-[#495366] font-pixel">Lv.{currentLevel}/7</span>
            </div>
 
-           <div className="grid grid-cols-2 gap-4">
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Dynamic Badge based on level */}
               <div className={`bg-[#EBE5D5] p-3 rounded-lg flex items-center gap-3 transition-transform hover:scale-105 border border-transparent hover:border-[#D3BC8E] relative group`}>
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 border-white ${lvlInfo.bg} ${lvlInfo.effect}`}>
+                <div className={`w-12 h-12 shrink-0 rounded-full flex items-center justify-center border-2 border-white ${lvlInfo.bg} ${lvlInfo.effect}`}>
                     <Icon size={24} className={lvlInfo.color} />
                 </div>
                 <div>
                     <div className="text-xs text-[#7E8592] font-bold">Danh hiệu</div>
-                    <div className={`text-sm font-bold ${lvlInfo.color}`}>{lvlInfo.name}</div>
+                    <div className={`text-sm font-bold ${lvlInfo.color} truncate max-w-[100px]`}>{lvlInfo.name}</div>
                 </div>
                 
                 {/* Flex Button */}
@@ -232,7 +234,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
 
               {/* Static Badge */}
               <div className="bg-[#EBE5D5] p-3 rounded-lg flex items-center gap-3">
-                 <div className="w-12 h-12 bg-indigo-200 rounded-full flex items-center justify-center border-2 border-white">
+                 <div className="w-12 h-12 shrink-0 bg-indigo-200 rounded-full flex items-center justify-center border-2 border-white">
                     <Star size={20} className="text-indigo-600" />
                  </div>
                  <div>
@@ -248,7 +250,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                   <h3 className="text-lg font-bold text-[#495366]">Chứng Nhận Siêu Cấp</h3>
               </div>
               
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                  {/* Render uploaded showcase images */}
                  {user.showcase?.map((img, idx) => (
                    <div key={idx} className="aspect-[3/4] bg-white rounded-lg relative overflow-hidden border-2 border-[#DCD6C7] shadow-sm group">

@@ -15,6 +15,8 @@ import {
 
 const POSTS_PER_PAGE = 10;
 const LEVEL_THRESHOLDS = [0, 300, 500, 1000, 2000, 4000, 7000, 10000];
+const STORAGE_KEY_USER = 'swm_user_data';
+const STORAGE_KEY_POSTS = 'swm_posts_data';
 
 // Background Types (Removed SNOW)
 type BackgroundType = 'CLOUD' | 'OCEAN' | 'CITY';
@@ -61,8 +63,27 @@ const INITIAL_POSTS: Post[] = [
 
 const App: React.FC = () => {
   const [activeSubject, setActiveSubject] = useState<SubjectId>('KHAC');
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Load posts from localStorage or use initial
+  const [posts, setPosts] = useState<Post[]>(() => {
+    try {
+      const savedPosts = localStorage.getItem(STORAGE_KEY_POSTS);
+      return savedPosts ? JSON.parse(savedPosts) : INITIAL_POSTS;
+    } catch (e) {
+      return INITIAL_POSTS;
+    }
+  });
+
+  // Load user from localStorage
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
   const [showLogin, setShowLogin] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -83,7 +104,20 @@ const App: React.FC = () => {
   const menuScrollRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Background Rotation Logic (Removed SNOW)
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(posts));
+  }, [posts]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
+  }, [currentUser]);
+
+  // Background Rotation Logic
   useEffect(() => {
     const backgrounds: BackgroundType[] = ['CLOUD', 'OCEAN', 'CITY'];
     let index = 0;
