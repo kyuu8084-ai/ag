@@ -37,8 +37,11 @@ try {
   console.error("🔥 Firebase initialization error:", error);
 }
 
+// Export database instance
+export { db, isConfigured };
+
+// Re-export Firestore functions to be used in App.tsx
 export { 
-  db, 
   collection, 
   addDoc, 
   updateDoc, 
@@ -47,19 +50,5 @@ export {
   arrayUnion, 
   increment, 
   query, 
-  orderBy, 
-  isConfigured 
-};
-export { 
-  db, 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  onSnapshot, 
-  arrayUnion, 
-  increment, 
-  query, 
-  orderBy, 
-  isConfigured 
+  orderBy 
 };
