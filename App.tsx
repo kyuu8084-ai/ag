@@ -105,10 +105,22 @@ const App: React.FC = () => {
       // ONLINE MODE: Subscribe to Firestore
       const q = query(collection(db, "posts"), orderBy("timestamp", "desc"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        const cloudPosts = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Post[];
+        const cloudPosts = snapshot.docs.map(doc => {
+          const data = doc.data();
+          // Safe mapping ensuring all required Post fields exist
+          return {
+            id: doc.id,
+            subject: data.subject || 'KHAC',
+            author: data.author || 'Anonymous',
+            avatar: data.avatar || '',
+            content: data.content || '',
+            timestamp: data.timestamp || Date.now(),
+            likes: data.likes || 0,
+            attachments: data.attachments || [],
+            comments: data.comments || [],
+            frameId: data.frameId
+          } as Post;
+        });
         setPosts(cloudPosts);
       }, (error) => {
         console.error("Error reading from Firebase:", error);
@@ -275,7 +287,7 @@ const App: React.FC = () => {
     };
 
     if (isFirebaseReady && db) {
-      // Save to Firebase
+      // Save to Firebase with type checking on 'db'
       try {
         await addDoc(collection(db, "posts"), newPostData);
       } catch (e) {
@@ -283,7 +295,7 @@ const App: React.FC = () => {
       }
     } else {
       // Save to LocalStorage
-      const newPost: Post = { ...newPostData, id: Date.now().toString() };
+      const newPost: Post = { ...newPostData, id: Date.now().toString() } as Post;
       setPosts([newPost, ...posts]);
     }
 
