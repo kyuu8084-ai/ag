@@ -6,7 +6,7 @@ import { ComposePost } from './ComposePost';
 interface PostCardProps {
   post: Post;
   onLike: (postId: string) => void;
-  onReply: (postId: string, content: string, attachments: Attachment[]) => void;
+  onReply: (postId: string, content: string, attachments: Attachment[]) => Promise<void>;
 }
 
 const AudioPlayer = ({ url }: { url: string }) => {
@@ -149,8 +149,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
             <div className="mt-4 animate-fade-in-up">
               <ComposePost 
                 placeholder="Viết câu trả lời của bạn..." 
-                onSubmit={(content, atts) => {
-                  onReply(post.id, content, atts);
+                onSubmit={async (content, atts) => {
+                  await onReply(post.id, content, atts);
                   setShowReply(false);
                 }} 
                 compact
