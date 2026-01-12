@@ -32,7 +32,7 @@ try {
   const app = initializeApp(firebaseConfig);
   db = getFirestore(app);
   isConfigured = true;
-  console.log("🔥 Firebase connected successfully to project: studywithme-a89e3");
+  console.log("🔥 Firebase connected successfully");
 } catch (error) {
   console.error("🔥 Firebase initialization error:", error);
 }

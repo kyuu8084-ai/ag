@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { Image as ImageIcon, Mic, Camera, Send, X, User as UserIcon } from 'lucide-react';
+import { Image as ImageIcon, Mic, Camera, Send, X, User as UserIcon, Loader2 } from 'lucide-react';
 import { Attachment, AttachmentType } from '../types';
 import { CameraCapture } from './CameraCapture';
 import { AudioRecorder } from './AudioRecorder';
+import { compressImage, blobToBase64 } from '../utils/helpers';
 
 interface ComposePostProps {
-  onSubmit: (content: string, attachments: Attachment[]) => void;
+  onSubmit: (content: string, attachments: Attachment[]) => Promise<void>;
   placeholder?: string;
   compact?: boolean;
   userAvatar?: string;
@@ -16,49 +17,79 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() && attachments.length === 0) return;
-    onSubmit(content, attachments);
-    setContent("");
-    setAttachments([]);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const url = URL.createObjectURL(file);
-      setAttachments(prev => [...prev, {
-        id: Math.random().toString(36),
-        type: AttachmentType.IMAGE,
-        url,
-        mimeType: file.type
-      }]);
+    if ((!content.trim() && attachments.length === 0) || isProcessing || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onSubmit(content, attachments);
+      // Only clear if successful
+      setContent("");
+      setAttachments([]);
+    } catch (error) {
+      console.error("Submit failed", error);
+      alert("Không thể đăng bài. Vui lòng kiểm tra kết nối mạng và thử lại!");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleCameraCapture = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    setAttachments(prev => [...prev, {
-      id: Math.random().toString(36),
-      type: AttachmentType.IMAGE,
-      url,
-      mimeType: 'image/jpeg'
-    }]);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setIsProcessing(true);
+      try {
+        const file = e.target.files[0];
+        const base64 = await compressImage(file);
+        setAttachments(prev => [...prev, {
+          id: Math.random().toString(36),
+          type: AttachmentType.IMAGE,
+          url: base64,
+          mimeType: 'image/jpeg'
+        }]);
+      } catch (e) {
+        console.error("Image processing failed", e);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
   };
 
-  const handleAudioCapture = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    setAttachments(prev => [...prev, {
-      id: Math.random().toString(36),
-      type: AttachmentType.AUDIO,
-      url,
-      mimeType: blob.type
-    }]);
-    setIsRecording(false);
+  const handleCameraCapture = async (blob: Blob) => {
+    setIsProcessing(true);
+    try {
+      const base64 = await compressImage(blob);
+      setAttachments(prev => [...prev, {
+        id: Math.random().toString(36),
+        type: AttachmentType.IMAGE,
+        url: base64,
+        mimeType: 'image/jpeg'
+      }]);
+    } finally {
+      setIsProcessing(false);
+      setIsCameraOpen(false);
+    }
+  };
+
+  const handleAudioCapture = async (blob: Blob) => {
+    setIsProcessing(true);
+    try {
+      const base64 = await blobToBase64(blob);
+      setAttachments(prev => [...prev, {
+        id: Math.random().toString(36),
+        type: AttachmentType.AUDIO,
+        url: base64,
+        mimeType: blob.type
+      }]);
+    } finally {
+      setIsProcessing(false);
+      setIsRecording(false);
+    }
   };
 
   const removeAttachment = (id: string) => {
@@ -96,6 +127,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                placeholder={placeholder}
                className="w-full bg-transparent resize-none outline-none text-gray-800 placeholder-gray-400 min-h-[60px]"
                rows={compact ? 1 : 3}
+               disabled={isSubmitting}
              />
              
              {/* Attachment Previews */}
@@ -143,6 +175,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                    onClick={() => fileInputRef.current?.click()}
                    className="p-2 text-sky-500 hover:bg-sky-50 rounded-full transition-colors tooltip"
                    title="Thêm ảnh"
+                   disabled={isProcessing || isSubmitting}
                  >
                    <ImageIcon size={20} />
                  </button>
@@ -152,6 +185,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                    onClick={() => setIsCameraOpen(true)}
                    className="p-2 text-sky-500 hover:bg-sky-50 rounded-full transition-colors"
                    title="Chụp ảnh ngay"
+                   disabled={isProcessing || isSubmitting}
                  >
                    <Camera size={20} />
                  </button>
@@ -161,6 +195,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                    onClick={() => setIsRecording(!isRecording)}
                    className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 bg-red-50' : 'text-sky-500 hover:bg-sky-50'}`}
                    title="Ghi âm giọng nói"
+                   disabled={isProcessing || isSubmitting}
                  >
                    <Mic size={20} />
                  </button>
@@ -168,11 +203,12 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
 
                <button
                  type="submit"
-                 disabled={!content.trim() && attachments.length === 0}
+                 disabled={(!content.trim() && attachments.length === 0) || isProcessing || isSubmitting}
                  className="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-sky-200 transition-all disabled:opacity-50 disabled:shadow-none hover:-translate-y-0.5"
                >
-                 <span className="hidden md:inline">Đăng</span>
-                 <Send size={18} />
+                 {(isProcessing || isSubmitting) && <Loader2 className="animate-spin" size={16} />}
+                 <span className="hidden md:inline">{isSubmitting ? 'Đang gửi...' : 'Đăng'}</span>
+                 {!isProcessing && !isSubmitting && <Send size={18} />}
                </button>
              </div>
            </div>

@@ -104,6 +104,7 @@ const App: React.FC = () => {
     if (isFirebaseReady && db) {
       // ONLINE MODE: Subscribe to Firestore
       const q = query(collection(db, "posts"), orderBy("timestamp", "desc"));
+      console.log("Subscribing to Firestore posts...");
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const cloudPosts = snapshot.docs.map(doc => {
           const data = doc.data();
@@ -290,8 +291,11 @@ const App: React.FC = () => {
       // Save to Firebase with type checking on 'db'
       try {
         await addDoc(collection(db, "posts"), newPostData);
+        // Do NOT manually add to local state if using Firebase, 
+        // wait for onSnapshot to update it.
       } catch (e) {
         console.error("Error adding doc: ", e);
+        throw e; // Rethrow to let UI know
       }
     } else {
       // Save to LocalStorage
@@ -350,6 +354,8 @@ const App: React.FC = () => {
          });
        } catch (e) {
          console.error("Error adding reply: ", e);
+         alert("Lỗi khi gửi bình luận. Vui lòng thử lại.");
+         return;
        }
     } else {
       setPosts(prevPosts => prevPosts.map(post => {
