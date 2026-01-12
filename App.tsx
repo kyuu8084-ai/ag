@@ -119,7 +119,7 @@ const App: React.FC = () => {
             likes: data.likes || 0,
             attachments: data.attachments || [],
             comments: data.comments || [],
-            frameId: data.frameId
+            frameId: data.frameId || undefined // Handle null from DB
           } as Post;
         });
         setPosts(cloudPosts);
@@ -275,6 +275,7 @@ const App: React.FC = () => {
       return;
     }
     
+    // IMPORTANT: Firebase does NOT support 'undefined'. We must use null for optional fields.
     const newPostData = {
       subject: activeSubject,
       author: currentUser.name,
@@ -284,7 +285,7 @@ const App: React.FC = () => {
       likes: 0,
       attachments,
       comments: [],
-      frameId: currentUser.frameId
+      frameId: currentUser.frameId || null // FIXED: Convert undefined to null
     };
 
     if (isFirebaseReady && db) {
@@ -299,7 +300,7 @@ const App: React.FC = () => {
       }
     } else {
       // Save to LocalStorage
-      const newPost: Post = { ...newPostData, id: Date.now().toString() } as Post;
+      const newPost: Post = { ...newPostData, id: Date.now().toString(), frameId: newPostData.frameId || undefined };
       setPosts([newPost, ...posts]);
     }
 
@@ -336,14 +337,15 @@ const App: React.FC = () => {
       setShowLogin(true);
       return;
     }
-    const newComment: Comment = {
+    // IMPORTANT: Firebase does NOT support 'undefined'. Use null.
+    const newComment = {
       id: Date.now().toString(),
       author: currentUser.name,
       avatar: currentUser.avatar,
       content,
       timestamp: Date.now(),
       attachments,
-      frameId: currentUser.frameId
+      frameId: currentUser.frameId || null // FIXED: Convert undefined to null
     };
 
     if (isFirebaseReady && db) {
@@ -358,9 +360,11 @@ const App: React.FC = () => {
          return;
        }
     } else {
+      // Convert null back to undefined for local state strict typing if needed, though most TS allows implicit handling
+      const localComment = { ...newComment, frameId: newComment.frameId || undefined };
       setPosts(prevPosts => prevPosts.map(post => {
         if (post.id === postId) {
-          return { ...post, comments: [...post.comments, newComment] };
+          return { ...post, comments: [...post.comments, localComment] };
         }
         return post;
       }));
