@@ -6,7 +6,7 @@ import { ComposePost } from './components/ComposePost';
 import { PostCard } from './components/PostCard';
 import { LoginModal } from './components/LoginModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { Post, Attachment, Comment, SubjectId, SUBJECTS, User, Notification, FRAMES, PostTag } from './types';
+import { Post, Attachment, SubjectId, SUBJECTS, User, Notification, FRAMES, PostTag } from './types';
 import { db, collection, addDoc, updateDoc, doc, onSnapshot, arrayUnion, increment, query, orderBy, isConfigured as isFirebaseReady } from './services/firebase';
 import { 
   BookOpen, LogIn, ChevronLeft, ChevronRight, Trophy, Sparkles, 
