@@ -21,6 +21,8 @@ export interface Comment {
   frameId?: string; // Add frame support to comments
 }
 
+export type PostTag = 'Q&A' | 'Thảo Luận' | 'Chia Sẻ' | 'Tài Liệu' | 'Góc Chill';
+
 export interface Post {
   id: string;
   author: string;
@@ -31,7 +33,10 @@ export interface Post {
   likes: number;
   comments: Comment[];
   subject: SubjectId;
-  frameId?: string; // Add frame support to posts
+  frameId?: string; 
+  tags?: PostTag[]; // New Feature: Tags
+  isPinned?: boolean; // New Feature: Pin post
+  views?: number; // New Feature: View count
 }
 
 export type SubjectId = 'KHAC' | 'TOAN' | 'LI' | 'HOA' | 'SINH' | 'SU' | 'VAN' | 'ANH' | 'DIA' | 'KTPL' | 'CONGNGHE';
@@ -49,6 +54,8 @@ export const SUBJECTS: Record<SubjectId, string> = {
   KTPL: 'Kinh Tế - Pháp Luật',
   CONGNGHE: 'Công Nghệ'
 };
+
+export const POST_TAGS: PostTag[] = ['Q&A', 'Thảo Luận', 'Chia Sẻ', 'Tài Liệu', 'Góc Chill'];
 
 export interface Frame {
   id: string;

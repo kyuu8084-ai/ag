@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { Image as ImageIcon, Mic, Camera, Send, X, User as UserIcon, Loader2 } from 'lucide-react';
-import { Attachment, AttachmentType } from '../types';
+import { Image as ImageIcon, Mic, Camera, Send, X, User as UserIcon, Loader2, Tag } from 'lucide-react';
+import { Attachment, AttachmentType, PostTag, POST_TAGS } from '../types';
 import { CameraCapture } from './CameraCapture';
 import { AudioRecorder } from './AudioRecorder';
 import { compressImage, blobToBase64 } from '../utils/helpers';
 
 interface ComposePostProps {
-  onSubmit: (content: string, attachments: Attachment[]) => Promise<void>;
+  onSubmit: (content: string, attachments: Attachment[], tags?: PostTag[]) => Promise<void>;
   placeholder?: string;
   compact?: boolean;
   userAvatar?: string;
@@ -15,10 +15,13 @@ interface ComposePostProps {
 export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder = "Bạn đang nghĩ gì?", compact = false, userAvatar }) => {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [selectedTags, setSelectedTags] = useState<PostTag[]>([]);
+  
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTagMenu, setShowTagMenu] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,10 +31,12 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
     
     setIsSubmitting(true);
     try {
-      await onSubmit(content, attachments);
+      await onSubmit(content, attachments, selectedTags.length > 0 ? selectedTags : undefined);
       // Only clear if successful
       setContent("");
       setAttachments([]);
+      setSelectedTags([]);
+      setShowTagMenu(false);
     } catch (error) {
       console.error("Submit failed", error);
       alert("Không thể đăng bài. Vui lòng kiểm tra kết nối mạng và thử lại!");
@@ -96,6 +101,16 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
+  const toggleTag = (tag: PostTag) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(prev => prev.filter(t => t !== tag));
+    } else {
+      if (selectedTags.length < 2) { // Limit to 2 tags
+         setSelectedTags(prev => [...prev, tag]);
+      }
+    }
+  };
+
   return (
     <>
       <form onSubmit={handleSubmit} className={`${compact ? 'bg-white rounded-xl' : 'bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border-2 border-sky-200'} p-4 transition-all duration-300`}>
@@ -112,7 +127,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
            {!compact && (
              <div className="w-10 h-10 rounded-full border border-gray-200 overflow-hidden hidden md:block shrink-0">
                {userAvatar ? (
-                 <img src={userAvatar} alt="User" className="w-full h-full object-cover" />
+                 <img src={userAvatar} alt="User" className="w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
                ) : (
                  <div className="w-full h-full bg-gray-100 flex items-center justify-center">
                    <UserIcon className="text-gray-400" size={24} />
@@ -120,7 +135,7 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                )}
              </div>
            )}
-           <div className="flex-1">
+           <div className="flex-1 relative">
              <textarea
                value={content}
                onChange={(e) => setContent(e.target.value)}
@@ -129,6 +144,18 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                rows={compact ? 1 : 3}
                disabled={isSubmitting}
              />
+
+             {/* Selected Tags Display */}
+             {selectedTags.length > 0 && (
+                <div className="flex gap-2 mb-2">
+                  {selectedTags.map(tag => (
+                    <span key={tag} className="text-[10px] font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full flex items-center gap-1">
+                      {tag}
+                      <button type="button" onClick={() => toggleTag(tag)}><X size={10} /></button>
+                    </span>
+                  ))}
+                </div>
+             )}
              
              {/* Attachment Previews */}
              {attachments.length > 0 && (
@@ -199,6 +226,33 @@ export const ComposePost: React.FC<ComposePostProps> = ({ onSubmit, placeholder 
                  >
                    <Mic size={20} />
                  </button>
+
+                 <div className="relative">
+                    <button 
+                      type="button"
+                      onClick={() => setShowTagMenu(!showTagMenu)}
+                      className={`p-2 rounded-full transition-colors ${showTagMenu || selectedTags.length > 0 ? 'text-indigo-500 bg-indigo-50' : 'text-sky-500 hover:bg-sky-50'}`}
+                      title="Gắn thẻ chủ đề"
+                      disabled={isProcessing || isSubmitting}
+                    >
+                      <Tag size={20} />
+                    </button>
+                    
+                    {showTagMenu && (
+                      <div className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-xl border border-sky-100 p-2 min-w-[150px] z-20 flex flex-col gap-1 animate-fade-in-up">
+                         {POST_TAGS.map(tag => (
+                           <button
+                             key={tag}
+                             type="button"
+                             onClick={() => toggleTag(tag)}
+                             className={`text-left px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${selectedTags.includes(tag) ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                           >
+                             {tag} {selectedTags.includes(tag) && '✓'}
+                           </button>
+                         ))}
+                      </div>
+                    )}
+                 </div>
                </div>
 
                <button

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, MessageCircle, Play, Pause, Bot } from 'lucide-react';
+import { Heart, MessageCircle, Play, Pause, Bot, Eye, Pin } from 'lucide-react';
 import { Post, Attachment, AttachmentType, FRAMES } from '../types';
 import { ComposePost } from './ComposePost';
 
@@ -39,30 +39,72 @@ const AudioPlayer = ({ url }: { url: string }) => {
   );
 };
 
+const TagBadge = ({ tag }: { tag: string }) => {
+  let className = "tag-badge ";
+  switch(tag) {
+    case 'Q&A': className += "tag-qa"; break;
+    case 'Thảo Luận': className += "tag-discuss"; break;
+    case 'Chia Sẻ': className += "tag-share"; break;
+    case 'Tài Liệu': className += "tag-doc"; break;
+    case 'Góc Chill': className += "tag-chill"; break;
+    default: className += "tag-discuss";
+  }
+  return <span className={className}>{tag}</span>;
+};
+
 export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => {
   const [showReply, setShowReply] = useState(false);
   
   const authorFrame = post.frameId ? FRAMES.find(f => f.id === post.frameId) : null;
+  const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${post.author}`;
 
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-sky-100 overflow-hidden mb-6 transition-transform hover:scale-[1.01] duration-300">
+    <div className={`bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 ${post.isPinned ? 'border-yellow-400 shadow-yellow-100' : 'border-sky-100'} overflow-hidden mb-6 transition-transform hover:scale-[1.005] duration-300 relative`}>
+      
+      {/* Pinned Icon */}
+      {post.isPinned && (
+        <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 px-3 py-1 rounded-bl-xl font-bold text-xs flex items-center gap-1 z-10 shadow-sm">
+          <Pin size={12} fill="currentColor" />
+          Đã Ghim
+        </div>
+      )}
+
       <div className="p-4 md:p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="relative">
-             <img src={post.avatar} alt={post.author} className="w-10 h-10 rounded-full border border-sky-300 bg-white object-cover" />
-             {authorFrame && <div className={authorFrame.cssClass} style={{ inset: '-3px' }}></div>}
+          {/* Avatar Container - Fixed for Alignment */}
+          <div className="relative w-12 h-12 shrink-0">
+             <img 
+               src={post.avatar || defaultAvatar} 
+               alt={post.author} 
+               className="w-full h-full rounded-full bg-gray-100 object-cover border border-gray-100"
+               onError={(e) => {
+                 e.currentTarget.src = defaultAvatar;
+               }}
+             />
+             {authorFrame && <div className={authorFrame.cssClass}></div>}
           </div>
-          <div>
-            <h3 className="font-bold text-gray-800 leading-tight">{post.author}</h3>
-            <span className="text-xs text-sky-500 font-medium">
-              {new Date(post.timestamp).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })}
-            </span>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-gray-800 leading-tight truncate">{post.author}</h3>
+              {post.tags?.map(tag => <TagBadge key={tag} tag={tag} />)}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+               <span className="text-xs text-sky-500 font-medium">
+                 {new Date(post.timestamp).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })}
+               </span>
+               {post.views !== undefined && (
+                 <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                   • <Eye size={10} /> {post.views}
+                 </span>
+               )}
+            </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="mb-4 text-gray-800 whitespace-pre-wrap leading-relaxed">
+        <div className="mb-4 text-gray-800 whitespace-pre-wrap leading-relaxed text-[15px]">
           {post.content}
         </div>
 
@@ -99,7 +141,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
             className="flex items-center gap-2 text-gray-500 hover:text-sky-600 transition-colors"
           >
             <MessageCircle size={20} />
-            <span className="text-sm font-semibold">Trả lời</span>
+            <span className="text-sm font-semibold">Trả lời ({post.comments.length})</span>
           </button>
         </div>
       </div>
@@ -109,6 +151,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
         <div className="bg-sky-50/50 p-4 border-t border-sky-100">
           {post.comments.map(comment => {
             const commentFrame = comment.frameId ? FRAMES.find(f => f.id === comment.frameId) : null;
+            const cmtDefaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${comment.author}`;
+            
             return (
             <div key={comment.id} className={`flex gap-3 mb-4 last:mb-0 ${comment.isAi ? 'bg-indigo-50/80 p-3 rounded-xl border border-indigo-100' : ''}`}>
                {comment.isAi ? (
@@ -116,9 +160,14 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
                    <Bot size={16} className="text-white" />
                  </div>
                ) : (
-                 <div className="relative shrink-0">
-                    <img src={comment.avatar} alt={comment.author} className="w-8 h-8 rounded-full border border-gray-200 bg-white object-cover" />
-                    {commentFrame && <div className={commentFrame.cssClass} style={{ inset: '-2px' }}></div>}
+                 <div className="relative w-8 h-8 shrink-0">
+                    <img 
+                      src={comment.avatar || cmtDefaultAvatar} 
+                      alt={comment.author} 
+                      className="w-full h-full rounded-full bg-white object-cover border border-gray-200" 
+                      onError={(e) => e.currentTarget.src = cmtDefaultAvatar}
+                    />
+                    {commentFrame && <div className={commentFrame.cssClass}></div>}
                  </div>
                )}
                <div className="flex-1 min-w-0">

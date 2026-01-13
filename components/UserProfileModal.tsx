@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { X, Edit2, Award, Book, Star, Crown, Zap, Flame, Trophy, PlusCircle, Camera, Image as ImageIcon } from 'lucide-react';
+import { X, Edit2, Award, Book, Star, Crown, Zap, Flame, Trophy, PlusCircle, Camera, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { User, FRAMES } from '../types';
+import { compressImage } from '../utils/helpers';
 
 interface UserProfileModalProps {
   user: User;
@@ -14,6 +15,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioInput, setBioInput] = useState(user.bio || '');
   const [showFrameSelector, setShowFrameSelector] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
   const showcaseInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -30,19 +32,33 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
     setIsEditingBio(false);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      onUpdateUser({ avatar: url });
+      setIsUploading(true);
+      try {
+        const base64 = await compressImage(e.target.files[0]);
+        onUpdateUser({ avatar: base64 });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
-  const handleShowcaseUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleShowcaseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      const currentShowcase = user.showcase || [];
-      if (currentShowcase.length < 4) {
-        onUpdateUser({ showcase: [...currentShowcase, url] });
+      setIsUploading(true);
+      try {
+        const base64 = await compressImage(e.target.files[0]);
+        const currentShowcase = user.showcase || [];
+        if (currentShowcase.length < 4) {
+          onUpdateUser({ showcase: [...currentShowcase, base64] });
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsUploading(false);
       }
     }
   };
@@ -71,14 +87,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
   const lvlInfo = getLevelInfo(currentLevel);
   const Icon = lvlInfo.icon;
   const currentFrame = FRAMES.find(f => f.id === user.frameId);
+  const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`;
 
   return (
-    // Outer overlay is now scrollable for mobile (overflow-y-auto) and items-start to prevent cutting off top on simple overflow
     <div className="fixed inset-0 z-50 flex md:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto items-start">
-      {/* Container: Removed fixed minHeight, added my-8 for scroll margin, flex-col on mobile */}
       <div className="relative w-full max-w-4xl bg-[#F4F1E8] rounded-xl shadow-2xl flex flex-col md:flex-row border-4 border-[#DCD6C7] my-8 md:my-0">
         
-        {/* Close Button - Fixed position relative to container is tricky on scroll, making it absolute top right */}
         <button 
           onClick={onClose}
           className="absolute top-2 right-2 z-50 text-gray-500 hover:text-red-500 bg-white/80 p-2 rounded-full shadow-md transition-all hover:scale-110"
@@ -93,15 +107,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
             {/* Avatar Section */}
             <div className="mt-8 mb-4 relative group">
               <div className="relative w-28 h-28 md:w-32 md:h-32 rounded-full bg-white p-1 shadow-inner cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-                 <img src={user.avatar} alt="Avatar" className="frame-content rounded-full transition-transform group-hover:scale-95" />
+                 {isUploading ? (
+                   <div className="w-full h-full rounded-full flex items-center justify-center bg-gray-100">
+                     <Loader2 className="animate-spin text-sky-500" />
+                   </div>
+                 ) : (
+                   <div className="relative w-full h-full">
+                     <img 
+                       src={user.avatar || defaultAvatar} 
+                       alt="Avatar" 
+                       className="w-full h-full rounded-full object-cover" 
+                       onError={(e) => e.currentTarget.src = defaultAvatar}
+                     />
+                     {currentFrame && <div className={currentFrame.cssClass}></div>}
+                   </div>
+                 )}
                  
-                 {/* Avatar Change Overlay */}
                  <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     <Camera className="text-white" size={32} />
                  </div>
-
-                 {/* CSS Frame Overlay */}
-                 {currentFrame && <div className={currentFrame.cssClass}></div>}
               </div>
 
               <div className="absolute -bottom-2 -right-2 bg-[#F6F1E3] p-2 rounded-full border border-[#DCD6C7] z-30">
@@ -114,6 +138,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                 className="hidden" 
                 accept="image/*"
                 onChange={handleAvatarChange}
+                disabled={isUploading}
               />
             </div>
             
@@ -141,14 +166,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                       onClick={() => { onUpdateUser({ frameId: frame.id }); setShowFrameSelector(false); }}
                    >
                       <div className="w-full h-full rounded-full bg-gray-200 relative">
-                         <div className={frame.cssClass} style={{ inset: '-5px' }}></div>
+                         <div className={frame.cssClass}></div>
                       </div>
                    </div>
                 ))}
               </div>
             )}
 
-            {/* Name */}
             <h2 className="text-xl md:text-2xl font-bold text-[#495366] font-bungee mb-6 mt-4 break-words text-center">{user.name}</h2>
 
             {/* Stats Bars */}
@@ -222,7 +246,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                     <div className={`text-sm font-bold ${lvlInfo.color} truncate max-w-[100px]`}>{lvlInfo.name}</div>
                 </div>
                 
-                {/* Flex Button */}
                 <button 
                   onClick={handleFlexBadge}
                   className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -262,10 +285,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                  {(!user.showcase || user.showcase.length < 4) && (
                    <div 
                       className="aspect-[3/4] bg-[#E0D8C3] rounded-lg relative group cursor-pointer overflow-hidden border-2 border-[#DCD6C7] hover:border-[#D3BC8E] transition-colors"
-                      onClick={() => showcaseInputRef.current?.click()}
+                      onClick={() => !isUploading && showcaseInputRef.current?.click()}
                    >
                       <div className="absolute inset-0 flex items-center justify-center text-[#9CA3AF] group-hover:bg-[#D3BC8E] group-hover:text-white transition-colors">
-                        <PlusCircle size={24} />
+                        {isUploading ? <Loader2 className="animate-spin" /> : <PlusCircle size={24} />}
                       </div>
                    </div>
                  )}
@@ -275,6 +298,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onUpda
                    className="hidden" 
                    accept="image/*" 
                    onChange={handleShowcaseUpload} 
+                   disabled={isUploading}
                  />
               </div>
               

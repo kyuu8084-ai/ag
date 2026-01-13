@@ -6,12 +6,13 @@ import { ComposePost } from './components/ComposePost';
 import { PostCard } from './components/PostCard';
 import { LoginModal } from './components/LoginModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { Post, Attachment, Comment, SubjectId, SUBJECTS, User, Notification, FRAMES } from './types';
+import { Post, Attachment, Comment, SubjectId, SUBJECTS, User, Notification, FRAMES, PostTag } from './types';
 import { generateAiReply } from './services/geminiService';
 import { db, collection, addDoc, updateDoc, doc, onSnapshot, arrayUnion, increment, query, orderBy, isConfigured as isFirebaseReady } from './services/firebase';
 import { 
   BookOpen, LogIn, ChevronLeft, ChevronRight, Trophy, Sparkles, 
-  Search, Bell, Filter, Flame, Clock, Cloud, Wifi, WifiOff
+  Search, Bell, Filter, Flame, Clock, Cloud, Wifi, WifiOff,
+  TrendingUp, Users, MessageSquare
 } from 'lucide-react';
 
 const POSTS_PER_PAGE = 10;
@@ -29,12 +30,15 @@ const INITIAL_POSTS: Post[] = [
     subject: 'KHAC',
     author: 'Admin',
     avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=admin',
-    content: 'Chào mừng đến với StudyWithMe! Hãy chọn môn học ở trên để bắt đầu thảo luận nhé ☁️',
+    content: 'Chào mừng đến với StudyWithMe! Hãy chọn môn học ở trên để bắt đầu thảo luận nhé ☁️\n\nQuy định: Tôn trọng nhau, không spam.',
     timestamp: Date.now() - 86400000,
-    likes: 99,
+    likes: 999,
     attachments: [],
     comments: [],
-    frameId: 'f5'
+    frameId: 'f5',
+    isPinned: true,
+    tags: ['Thảo Luận', 'Q&A'],
+    views: 1205
   },
   {
     id: '1',
@@ -46,7 +50,9 @@ const INITIAL_POSTS: Post[] = [
     likes: 5,
     attachments: [],
     comments: [],
-    frameId: 'f1'
+    frameId: 'f1',
+    tags: ['Q&A'],
+    views: 45
   },
   {
     id: '2',
@@ -58,7 +64,9 @@ const INITIAL_POSTS: Post[] = [
     likes: 12,
     attachments: [],
     comments: [],
-    frameId: 'f4'
+    frameId: 'f4',
+    tags: ['Chia Sẻ'],
+    views: 89
   }
 ];
 
@@ -119,7 +127,10 @@ const App: React.FC = () => {
             likes: data.likes || 0,
             attachments: data.attachments || [],
             comments: data.comments || [],
-            frameId: data.frameId || undefined // Handle null from DB
+            frameId: data.frameId || undefined,
+            isPinned: data.isPinned || false,
+            tags: data.tags || [],
+            views: data.views || 0
           } as Post;
         });
         setPosts(cloudPosts);
@@ -189,6 +200,10 @@ const App: React.FC = () => {
       post.author.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
+      // Pinned posts always first
+      if (a.isPinned !== b.isPinned) {
+        return (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+      }
       if (sortBy === 'popular') {
         return b.likes - a.likes; // Sort by likes desc
       }
@@ -269,7 +284,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleNewPost = async (content: string, attachments: Attachment[]) => {
+  const handleNewPost = async (content: string, attachments: Attachment[], tags?: PostTag[]) => {
     if (!currentUser) {
       setShowLogin(true);
       return;
@@ -285,15 +300,16 @@ const App: React.FC = () => {
       likes: 0,
       attachments,
       comments: [],
-      frameId: currentUser.frameId || null // FIXED: Convert undefined to null
+      frameId: currentUser.frameId || null,
+      isPinned: false,
+      tags: tags || [],
+      views: 0
     };
 
     if (isFirebaseReady && db) {
       // Save to Firebase with type checking on 'db'
       try {
         await addDoc(collection(db, "posts"), newPostData);
-        // Do NOT manually add to local state if using Firebase, 
-        // wait for onSnapshot to update it.
       } catch (e) {
         console.error("Error adding doc: ", e);
         throw e; // Rethrow to let UI know
@@ -337,7 +353,6 @@ const App: React.FC = () => {
       setShowLogin(true);
       return;
     }
-    // IMPORTANT: Firebase does NOT support 'undefined'. Use null.
     const newComment = {
       id: Date.now().toString(),
       author: currentUser.name,
@@ -345,14 +360,15 @@ const App: React.FC = () => {
       content,
       timestamp: Date.now(),
       attachments,
-      frameId: currentUser.frameId || null // FIXED: Convert undefined to null
+      frameId: currentUser.frameId || null
     };
 
     if (isFirebaseReady && db) {
        try {
          const postRef = doc(db, "posts", postId);
          await updateDoc(postRef, {
-           comments: arrayUnion(newComment)
+           comments: arrayUnion(newComment),
+           views: increment(1) // Interaction counts as view
          });
        } catch (e) {
          console.error("Error adding reply: ", e);
@@ -360,11 +376,10 @@ const App: React.FC = () => {
          return;
        }
     } else {
-      // Convert null back to undefined for local state strict typing if needed, though most TS allows implicit handling
       const localComment = { ...newComment, frameId: newComment.frameId || undefined };
       setPosts(prevPosts => prevPosts.map(post => {
         if (post.id === postId) {
-          return { ...post, comments: [...post.comments, localComment] };
+          return { ...post, comments: [...post.comments, localComment], views: (post.views || 0) + 1 };
         }
         return post;
       }));
@@ -429,6 +444,7 @@ const App: React.FC = () => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
   const currentFrame = currentUser?.frameId ? FRAMES.find(f => f.id === currentUser.frameId) : null;
+  const defaultAvatar = currentUser ? `https://api.dicebear.com/7.x/initials/svg?seed=${currentUser.name}` : '';
 
   return (
     <div className="min-h-screen relative font-sans text-gray-800 overflow-x-hidden bg-transparent transition-colors duration-1000">
@@ -440,7 +456,7 @@ const App: React.FC = () => {
       
       {/* Sticky Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-b border-sky-100 shadow-sm transition-all">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-6xl mx-auto px-4">
           <div className="h-16 flex items-center justify-between gap-4">
             
             {/* Logo */}
@@ -536,9 +552,16 @@ const App: React.FC = () => {
                   className="flex items-center gap-2 bg-sky-50 px-2 py-1 pr-4 rounded-full border-2 border-sky-100 hover:border-sky-300 hover:bg-sky-100 transition-all cursor-pointer group"
                 >
                   <div className="relative">
-                    {/* User Avatar with Frame (Header) */}
+                    {/* User Avatar with Frame (Header) - Fixed Size */}
                     <div className="relative w-9 h-9">
-                      <img src={currentUser.avatar} alt="Avatar" className="w-full h-full rounded-full border border-sky-200 group-hover:scale-105 transition-transform object-cover" />
+                      <img 
+                        src={currentUser.avatar || defaultAvatar} 
+                        alt="Avatar" 
+                        className="w-full h-full rounded-full border border-sky-200 group-hover:scale-105 transition-transform object-cover" 
+                        onError={(e) => {
+                          e.currentTarget.src = defaultAvatar;
+                        }}
+                      />
                       {currentFrame && (
                         <div className={currentFrame.cssClass}></div>
                       )}
@@ -605,114 +628,147 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="relative z-10 pt-40 pb-12 px-4 max-w-4xl mx-auto">
+      {/* Main Layout (2 Columns on Desktop) */}
+      <main className="relative z-10 pt-40 pb-12 px-4 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Intro Banner for current subject (MODERATE TEXT SIZE) */}
-        <div className="mb-8 text-center animate-fade-in-down flex justify-center">
-          <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border-4 border-sky-300 p-8 max-w-3xl w-full transform hover:scale-[1.01] transition-transform relative overflow-hidden group">
-             {/* Decorative lines */}
-             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-300 via-indigo-300 to-sky-300"></div>
-             <div className="absolute bottom-0 left-0 w-full h-2 bg-gradient-to-r from-sky-300 via-indigo-300 to-sky-300"></div>
-             <div className="absolute left-0 top-0 h-full w-2 bg-gradient-to-b from-sky-300 via-indigo-300 to-sky-300"></div>
-             <div className="absolute right-0 top-0 h-full w-2 bg-gradient-to-b from-sky-300 via-indigo-300 to-sky-300"></div>
-             
-             <div className="relative z-10">
-               <h2 className="text-2xl md:text-3xl font-bungee text-sky-800 tracking-wider drop-shadow-sm leading-tight">
-                  GÓC HỌC TẬP <br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mt-2 inline-block">
-                    {SUBJECTS[activeSubject].toUpperCase()}
-                  </span>
-               </h2>
-               <div className="mt-4 flex justify-center">
-                 <span className="px-6 py-2 bg-sky-100/50 rounded-full text-sky-800 font-bold uppercase tracking-widest text-sm border border-sky-200">
-                    Trao đổi kiến thức & Kinh nghiệm
-                 </span>
+        {/* LEFT COLUMN (Main Content) */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Intro Banner */}
+          <div className="text-center animate-fade-in-down">
+            <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border-4 border-sky-300 p-6 md:p-8 transform hover:scale-[1.01] transition-transform relative overflow-hidden group">
+               <div className="relative z-10">
+                 <h2 className="text-2xl md:text-3xl font-bungee text-sky-800 tracking-wider drop-shadow-sm leading-tight">
+                    GÓC HỌC TẬP <br/>
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mt-2 inline-block">
+                      {SUBJECTS[activeSubject].toUpperCase()}
+                    </span>
+                 </h2>
+                 <div className="mt-4 flex justify-center">
+                   <span className="px-6 py-2 bg-sky-100/50 rounded-full text-sky-800 font-bold uppercase tracking-widest text-sm border border-sky-200">
+                      Trao đổi kiến thức & Kinh nghiệm
+                   </span>
+                 </div>
                </div>
-             </div>
-             
-             {/* Subtle pattern background */}
-             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px]"></div>
+               <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px]"></div>
+            </div>
           </div>
-        </div>
 
-        {/* Compose Area */}
-        <div className="mb-8 sticky top-[160px] z-30">
-          <ComposePost 
-            onSubmit={handleNewPost} 
-            placeholder={`Đặt câu hỏi môn ${SUBJECTS[activeSubject]}...`}
-            userAvatar={currentUser?.avatar}
-          />
-        </div>
+          {/* Compose Area */}
+          <div className="sticky top-[160px] z-30">
+            <ComposePost 
+              onSubmit={handleNewPost} 
+              placeholder={`Đặt câu hỏi môn ${SUBJECTS[activeSubject]}...`}
+              userAvatar={currentUser?.avatar}
+            />
+          </div>
 
-        {/* Filter / Sort Bar with Background for Contrast */}
-        <div className="flex items-center justify-between mb-4 px-4 py-2 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-sky-100">
-           <div className="flex items-center gap-2 text-sky-800 text-sm font-bold">
-             <Filter size={16} />
-             <span>Lọc bài viết:</span>
-           </div>
-           <div className="flex gap-2">
+          {/* Filter Bar */}
+          <div className="flex items-center justify-between px-4 py-2 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-sky-100">
+             <div className="flex items-center gap-2 text-sky-800 text-sm font-bold">
+               <Filter size={16} />
+               <span>Lọc:</span>
+             </div>
+             <div className="flex gap-2">
+                <button 
+                  onClick={() => setSortBy('newest')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm font-bold transition-colors ${sortBy === 'newest' ? 'bg-sky-100 text-sky-700' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                  <Clock size={14} /> Mới nhất
+                </button>
+                <button 
+                  onClick={() => setSortBy('popular')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm font-bold transition-colors ${sortBy === 'popular' ? 'bg-orange-100 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                  <Flame size={14} /> Phổ biến
+                </button>
+             </div>
+          </div>
+
+          {/* Feed */}
+          <div className="space-y-6">
+            {displayedPosts.length > 0 ? (
+              displayedPosts.map(post => (
+                <PostCard 
+                  key={post.id} 
+                  post={post} 
+                  onLike={handleLike}
+                  onReply={handleReply}
+                />
+              ))
+            ) : (
+              <div className="text-center py-16 bg-white/80 backdrop-blur-sm rounded-3xl border-2 border-dashed border-sky-200">
+                <Cloud size={64} className="mx-auto mb-4 text-sky-300" />
+                <p className="text-sky-800 font-medium text-lg font-bungee">
+                  {searchQuery ? 'Không tìm thấy kết quả nào' : 'Chưa có bài thảo luận nào'}
+                </p>
+                <p className="text-sky-600/70 text-sm">
+                  {searchQuery ? 'Hãy thử từ khóa khác xem sao' : `Hãy là người đầu tiên đặt câu hỏi môn ${SUBJECTS[activeSubject]}!`}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {filteredPosts.length > POSTS_PER_PAGE && (
+            <div className="flex justify-center items-center gap-4 mt-8 bg-white/60 p-2 rounded-full backdrop-blur-sm inline-flex mx-auto w-full max-w-xs">
               <button 
-                onClick={() => setSortBy('newest')}
-                className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm font-bold transition-colors ${sortBy === 'newest' ? 'bg-sky-100 text-sky-700' : 'text-gray-500 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-full bg-white shadow border border-sky-100 disabled:opacity-50 hover:bg-sky-50 text-sky-600"
               >
-                <Clock size={14} /> Mới nhất
+                <ChevronLeft size={20} />
               </button>
+              <span className="font-bold text-sky-800 font-pixel">
+                Trang {currentPage} / {totalPages}
+              </span>
               <button 
-                onClick={() => setSortBy('popular')}
-                className={`flex items-center gap-1 px-3 py-1 rounded-md text-sm font-bold transition-colors ${sortBy === 'popular' ? 'bg-orange-100 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-full bg-white shadow border border-sky-100 disabled:opacity-50 hover:bg-sky-50 text-sky-600"
               >
-                <Flame size={14} /> Phổ biến
+                <ChevronRight size={20} />
               </button>
-           </div>
-        </div>
-
-        {/* Feed */}
-        <div className="space-y-6">
-          {displayedPosts.length > 0 ? (
-            displayedPosts.map(post => (
-              <PostCard 
-                key={post.id} 
-                post={post} 
-                onLike={handleLike}
-                onReply={handleReply}
-              />
-            ))
-          ) : (
-            <div className="text-center py-16 bg-white/80 backdrop-blur-sm rounded-3xl border-2 border-dashed border-sky-200">
-              <Cloud size={64} className="mx-auto mb-4 text-sky-300" />
-              <p className="text-sky-800 font-medium text-lg font-bungee">
-                {searchQuery ? 'Không tìm thấy kết quả nào' : 'Chưa có bài thảo luận nào'}
-              </p>
-              <p className="text-sky-600/70 text-sm">
-                {searchQuery ? 'Hãy thử từ khóa khác xem sao' : `Hãy là người đầu tiên đặt câu hỏi môn ${SUBJECTS[activeSubject]}!`}
-              </p>
             </div>
           )}
         </div>
 
-        {/* Pagination Controls */}
-        {filteredPosts.length > POSTS_PER_PAGE && (
-          <div className="flex justify-center items-center gap-4 mt-8 bg-white/60 p-2 rounded-full backdrop-blur-sm inline-flex mx-auto w-full max-w-xs">
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-2 rounded-full bg-white shadow border border-sky-100 disabled:opacity-50 hover:bg-sky-50 text-sky-600"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <span className="font-bold text-sky-800 font-pixel">
-              Trang {currentPage} / {totalPages}
-            </span>
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-full bg-white shadow border border-sky-100 disabled:opacity-50 hover:bg-sky-50 text-sky-600"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        )}
+        {/* RIGHT COLUMN (Sidebar) */}
+        <div className="hidden lg:block space-y-6">
+           {/* Community Stats */}
+           <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-sky-100 p-5">
+              <h3 className="flex items-center gap-2 font-bold text-gray-700 mb-4 border-b border-gray-100 pb-2">
+                 <TrendingUp size={20} className="text-sky-500" />
+                 Thống Kê Nhanh
+              </h3>
+              <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                       <MessageSquare size={16} /> Bài viết
+                    </div>
+                    <span className="font-bold text-sky-600">{posts.length}</span>
+                 </div>
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                       <Users size={16} /> Thành viên
+                    </div>
+                    <span className="font-bold text-sky-600">1,205</span>
+                 </div>
+              </div>
+           </div>
+
+           {/* User Info / CTA */}
+           <div className="bg-gradient-to-br from-indigo-500 to-sky-500 rounded-2xl shadow-lg p-5 text-white">
+              <h3 className="font-bungee text-lg mb-2">Đua Top Tháng Này</h3>
+              <p className="text-sm text-sky-100 mb-4">Tích cực thảo luận để nhận Khung Avatar độc quyền!</p>
+              <button 
+                 onClick={() => currentUser ? setShowProfile(true) : setShowLogin(true)}
+                 className="w-full bg-white text-sky-600 font-bold py-2 rounded-lg shadow-sm hover:bg-sky-50 transition-colors"
+              >
+                 {currentUser ? 'Xem Hồ Sơ Của Tôi' : 'Tham Gia Ngay'}
+              </button>
+           </div>
+        </div>
       </main>
 
       {/* Level Up Modal */}
