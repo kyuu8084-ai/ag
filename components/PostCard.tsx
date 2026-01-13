@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle, Play, Pause, Bot, Eye, Pin } from 'lucide-react';
-import { Post, Attachment, AttachmentType, FRAMES } from '../types';
+import { Post, Attachment, AttachmentType, FRAMES, User } from '../types';
 import { ComposePost } from './ComposePost';
 
 interface PostCardProps {
   post: Post;
   onLike: (postId: string) => void;
   onReply: (postId: string, content: string, attachments: Attachment[]) => Promise<void>;
+  currentUser?: User | null;
 }
 
 const AudioPlayer = ({ url }: { url: string }) => {
@@ -52,10 +53,15 @@ const TagBadge = ({ tag }: { tag: string }) => {
   return <span className={className}>{tag}</span>;
 };
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply, currentUser }) => {
   const [showReply, setShowReply] = useState(false);
   
-  const authorFrame = post.frameId ? FRAMES.find(f => f.id === post.frameId) : null;
+  // Use current user's avatar if they are the author (syncs profile changes immediately)
+  const isAuthor = currentUser && post.author === currentUser.name;
+  const displayAvatar = isAuthor ? (currentUser.avatar || post.avatar) : post.avatar;
+  const displayFrameId = isAuthor ? (currentUser.frameId || undefined) : post.frameId;
+
+  const authorFrame = displayFrameId ? FRAMES.find(f => f.id === displayFrameId) : null;
   const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${post.author}`;
 
   return (
@@ -75,7 +81,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
           {/* Avatar Container - Fixed for Alignment */}
           <div className="relative w-12 h-12 shrink-0">
              <img 
-               src={post.avatar || defaultAvatar} 
+               src={displayAvatar || defaultAvatar} 
                alt={post.author} 
                className="w-full h-full rounded-full bg-gray-100 object-cover border border-gray-100"
                onError={(e) => {
@@ -150,7 +156,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
       {(post.comments.length > 0 || showReply) && (
         <div className="bg-sky-50/50 p-4 border-t border-sky-100">
           {post.comments.map(comment => {
-            const commentFrame = comment.frameId ? FRAMES.find(f => f.id === comment.frameId) : null;
+            // Check if comment author is current user
+            const isCommentAuthor = currentUser && comment.author === currentUser.name;
+            const commentAvatar = isCommentAuthor ? (currentUser.avatar || comment.avatar) : comment.avatar;
+            const commentFrameId = isCommentAuthor ? (currentUser.frameId || undefined) : comment.frameId;
+
+            const commentFrame = commentFrameId ? FRAMES.find(f => f.id === commentFrameId) : null;
             const cmtDefaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${comment.author}`;
             
             return (
@@ -162,7 +173,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply }) => 
                ) : (
                  <div className="relative w-8 h-8 shrink-0">
                     <img 
-                      src={comment.avatar || cmtDefaultAvatar} 
+                      src={commentAvatar || cmtDefaultAvatar} 
                       alt={comment.author} 
                       className="w-full h-full rounded-full bg-white object-cover border border-gray-200" 
                       onError={(e) => e.currentTarget.src = cmtDefaultAvatar}

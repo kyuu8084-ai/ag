@@ -385,7 +385,7 @@ const App: React.FC = () => {
     }
 
     handleGainXP(50); // +50XP for replying
-    // Note: Tutor AI auto-reply has been removed as requested.
+    // Note: Tutor AI auto-reply has been removed.
   };
 
   const getLevelTitle = (level: number) => {
@@ -653,6 +653,7 @@ const App: React.FC = () => {
                   post={post} 
                   onLike={handleLike}
                   onReply={handleReply}
+                  currentUser={currentUser}
                 />
               ))
             ) : (
