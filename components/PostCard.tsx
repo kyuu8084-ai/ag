@@ -58,10 +58,15 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply, curre
   
   // Use current user's avatar if they are the author (syncs profile changes immediately)
   const isAuthor = currentUser && post.author === currentUser.name;
+  
+  // Logic: Prefer currentUser avatar if author, otherwise post avatar. 
+  // IMPORTANT: Ensure we have a valid string, fallback to defaultAvatar is handled by onError, 
+  // but we pass `undefined` if empty so we can track it.
   const displayAvatar = isAuthor ? (currentUser.avatar || post.avatar) : post.avatar;
   const displayFrameId = isAuthor ? (currentUser.frameId || undefined) : post.frameId;
 
   const authorFrame = displayFrameId ? FRAMES.find(f => f.id === displayFrameId) : null;
+  // Default avatar (initials) used as fallback
   const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${post.author}`;
 
   return (
@@ -80,7 +85,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply, curre
         <div className="flex items-center gap-3 mb-4">
           {/* Avatar Container - Fixed for Alignment */}
           <div className="relative w-12 h-12 shrink-0">
+             {/* KEY PROP ADDED: Forces re-render if URL changes, preventing broken image state persistence */}
              <img 
+               key={displayAvatar} 
                src={displayAvatar || defaultAvatar} 
                alt={post.author} 
                className="w-full h-full rounded-full bg-gray-100 object-cover border border-gray-100"
@@ -173,6 +180,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onLike, onReply, curre
                ) : (
                  <div className="relative w-8 h-8 shrink-0">
                     <img 
+                      key={commentAvatar}
                       src={commentAvatar || cmtDefaultAvatar} 
                       alt={comment.author} 
                       className="w-full h-full rounded-full bg-white object-cover border border-gray-200" 

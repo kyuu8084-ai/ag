@@ -22,9 +22,9 @@ export const compressImage = (file: File | Blob): Promise<string> => {
           return;
         }
 
-        // Resize logic: Max dimension 800px to save Firestore space
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
+        // Resize logic: Max dimension 500px to save space (sufficient for avatars)
+        const MAX_WIDTH = 500;
+        const MAX_HEIGHT = 500;
         let width = img.width;
         let height = img.height;
 
@@ -44,8 +44,8 @@ export const compressImage = (file: File | Blob): Promise<string> => {
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to Base64 JPEG with 0.7 quality
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        // Convert to Base64 JPEG with 0.8 quality
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         resolve(dataUrl);
       };
       
