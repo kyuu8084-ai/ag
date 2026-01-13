@@ -7,7 +7,6 @@ import { PostCard } from './components/PostCard';
 import { LoginModal } from './components/LoginModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { Post, Attachment, Comment, SubjectId, SUBJECTS, User, Notification, FRAMES, PostTag } from './types';
-import { generateAiReply } from './services/geminiService';
 import { db, collection, addDoc, updateDoc, doc, onSnapshot, arrayUnion, increment, query, orderBy, isConfigured as isFirebaseReady } from './services/firebase';
 import { 
   BookOpen, LogIn, ChevronLeft, ChevronRight, Trophy, Sparkles, 
@@ -386,47 +385,7 @@ const App: React.FC = () => {
     }
 
     handleGainXP(50); // +50XP for replying
-
-    const targetPost = posts.find(p => p.id === postId);
-    if (targetPost) {
-       // Mock notification & AI Reply
-       setTimeout(async () => {
-         const aiText = await generateAiReply(content, attachments, targetPost.subject);
-         const aiComment: Comment = {
-           id: 'ai-' + Date.now(),
-           author: 'Tutor AI',
-           avatar: '', 
-           content: aiText,
-           timestamp: Date.now(),
-           attachments: [],
-           isAi: true
-         };
-         
-         if (isFirebaseReady && db) {
-           try {
-             const postRef = doc(db, "posts", postId);
-             await updateDoc(postRef, {
-               comments: arrayUnion(aiComment)
-             });
-           } catch(e) {}
-         } else {
-           setPosts(currentPosts => currentPosts.map(p => {
-             if (p.id === postId) {
-               return { ...p, comments: [...p.comments, aiComment] };
-             }
-             return p;
-           }));
-         }
-
-         setNotifications(prev => [{
-           id: 'notif-' + Date.now(),
-           content: `Tutor AI đã trả lời trong bài viết "${targetPost.content.substring(0, 20)}..."`,
-           timestamp: Date.now(),
-           read: false
-         }, ...prev]);
-
-       }, 2000);
-    }
+    // Note: Tutor AI auto-reply has been removed as requested.
   };
 
   const getLevelTitle = (level: number) => {
