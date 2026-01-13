@@ -4,27 +4,26 @@ export const compressImage = (file: File | Blob): Promise<string> => {
     reader.readAsDataURL(file);
     
     reader.onload = (event: ProgressEvent<FileReader>) => {
-      // Strict check for event.target and result
       if (!event.target || !event.target.result) {
         reject(new Error("Failed to read file"));
         return;
       }
 
       const img = new Image();
-      // Ensure result is treated as string (readAsDataURL guarantees this)
       img.src = event.target.result as string;
       
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(event.target?.result as string); // Fallback if canvas fails
+          resolve(event.target?.result as string);
           return;
         }
 
-        // Resize logic: Max dimension 500px to save space (sufficient for avatars)
-        const MAX_WIDTH = 500;
-        const MAX_HEIGHT = 500;
+        // Tối ưu hóa mạnh cho Avatar: Max 300px
+        // Điều này đảm bảo chuỗi Base64 đủ nhỏ để lưu vào LocalStorage không bị lỗi
+        const MAX_WIDTH = 300;
+        const MAX_HEIGHT = 300;
         let width = img.width;
         let height = img.height;
 
@@ -44,8 +43,8 @@ export const compressImage = (file: File | Blob): Promise<string> => {
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to Base64 JPEG with 0.8 quality
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        // Nén chất lượng xuống 0.6 (đủ nét cho avatar nhỏ)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(dataUrl);
       };
       

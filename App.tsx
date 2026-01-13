@@ -159,15 +159,6 @@ const App: React.FC = () => {
     }
   }, [posts]);
 
-  // Persistence Effects - Save whenever user changes (User data always local for now)
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(STORAGE_KEY_USER);
-    }
-  }, [currentUser]);
-
   // Background Rotation Logic
   useEffect(() => {
     const backgrounds: BackgroundType[] = ['CLOUD', 'OCEAN', 'CITY'];
@@ -238,18 +229,30 @@ const App: React.FC = () => {
     return Math.min(level, 7);
   };
 
+  // Helper to save user reliably
+  const saveUserToStorage = (user: User) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    } catch (e) {
+      console.error("Storage full or error:", e);
+      alert("Cảnh báo: Bộ nhớ trình duyệt đã đầy. Ảnh đại diện có thể không được lưu. Hãy thử ảnh nhỏ hơn hoặc xóa bớt dữ liệu duyệt web.");
+    }
+  };
+
   const handleGainXP = (amount: number) => {
     if (!currentUser) return;
     const newXP = (currentUser.xp || 0) + amount;
     const oldLevel = currentUser.level || 1;
     const newLevel = calculateLevel(newXP);
     
-    handleUpdateUser({ xp: newXP, level: newLevel });
+    // Create updated user object
+    const updatedUser = { ...currentUser, xp: newXP, level: newLevel };
+    setCurrentUser(updatedUser);
+    saveUserToStorage(updatedUser);
 
     if (newLevel > oldLevel) {
       setNewLevelData(newLevel);
       setShowLevelUp(true);
-      // Add notification for level up
       setNotifications(prev => [{
         id: Date.now().toString(),
         content: `Chúc mừng! Bạn đã đạt cấp độ ${newLevel}!`,
@@ -270,8 +273,7 @@ const App: React.FC = () => {
       showcase: []
     };
     setCurrentUser(newUser);
-    // Explicitly save immediately
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(newUser));
+    saveUserToStorage(newUser);
     setShowLogin(false);
   };
 
@@ -279,7 +281,7 @@ const App: React.FC = () => {
     if (currentUser) {
       const updatedUser = { ...currentUser, ...updates };
       setCurrentUser(updatedUser);
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+      saveUserToStorage(updatedUser);
     }
   };
 
@@ -289,7 +291,6 @@ const App: React.FC = () => {
       return;
     }
     
-    // IMPORTANT: Firebase does NOT support 'undefined'. We must use null for optional fields.
     const newPostData = {
       subject: activeSubject,
       author: currentUser.name,
@@ -306,21 +307,19 @@ const App: React.FC = () => {
     };
 
     if (isFirebaseReady && db) {
-      // Save to Firebase with type checking on 'db'
       try {
         await addDoc(collection(db, "posts"), newPostData);
       } catch (e) {
         console.error("Error adding doc: ", e);
-        throw e; // Rethrow to let UI know
+        throw e;
       }
     } else {
-      // Save to LocalStorage
       const newPost: Post = { ...newPostData, id: Date.now().toString(), frameId: newPostData.frameId || undefined };
       setPosts([newPost, ...posts]);
     }
 
     setCurrentPage(1);
-    handleGainXP(50); // +50XP for posting
+    handleGainXP(50);
   };
 
   const handleLike = async (postId: string) => {
@@ -367,7 +366,7 @@ const App: React.FC = () => {
          const postRef = doc(db, "posts", postId);
          await updateDoc(postRef, {
            comments: arrayUnion(newComment),
-           views: increment(1) // Interaction counts as view
+           views: increment(1)
          });
        } catch (e) {
          console.error("Error adding reply: ", e);
@@ -384,8 +383,7 @@ const App: React.FC = () => {
       }));
     }
 
-    handleGainXP(50); // +50XP for replying
-    // Note: Tutor AI auto-reply has been removed.
+    handleGainXP(50);
   };
 
   const getLevelTitle = (level: number) => {
